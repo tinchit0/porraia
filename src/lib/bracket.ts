@@ -179,6 +179,24 @@ export const ROUND_LABELS: Record<Round, string> = {
   F: "Final",
 };
 
+// Etiquetas cortas para tabs (estilo fracción)
+export const ROUND_TAB_LABELS: Record<Round, string> = {
+  R32: "1/16",
+  R16: "1/8",
+  QF: "1/4",
+  SF: "1/2",
+  F: "Final",
+};
+
+// Etiquetas largas para títulos de sección
+export const ROUND_FULL_LABELS: Record<Round, string> = {
+  R32: "Dieciseisavos",
+  R16: "Octavos",
+  QF: "Cuartos",
+  SF: "Semifinal",
+  F: "Final",
+};
+
 export const ROUND_ORDER: Round[] = ["R32", "R16", "QF", "SF", "F"];
 
 export function roundOf(slot: string): string {

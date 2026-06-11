@@ -28,16 +28,25 @@ export default async function ClasificacionPage() {
               <tr>
                 <th className="px-4 py-3">#</th>
                 <th className="px-4 py-3">Participante</th>
-                <th className="px-4 py-3 text-center">Porra</th>
-                <th className="px-4 py-3 text-center">Exactos</th>
-                <th className="px-4 py-3 text-center">1X2</th>
-                <th className="px-4 py-3 text-center">Cuadro</th>
+                <th className="px-4 py-3 text-center" title="Partidos de fase de grupos completados">Completado</th>
+                <th className="px-4 py-3 text-center cursor-help" title="Marcador exacto (3 pts)">🎯</th>
+                <th className="px-4 py-3 text-center cursor-help" title="Diferencia de goles correcta (2 pts)">🔥</th>
+                <th className="px-4 py-3 text-center cursor-help" title="Resultado 1X2 correcto (1 pt)">✅</th>
+                <th className="px-4 py-3 text-center cursor-help" title="Fallos en partidos ya jugados">❌</th>
+                <th className="px-4 py-3 text-center cursor-help" title="Equipos acertados por ronda: 1/16 · 1/8 · 1/4 · 1/2 · Final">Cuadro</th>
                 <th className="px-4 py-3 text-right">Puntos</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => {
                 const isMe = r.userId === user.id;
+                const { filled, total } = r.completed;
+                const completedColor =
+                  filled === 0
+                    ? "text-red-400"
+                    : filled >= total
+                    ? "text-green-400"
+                    : "text-yellow-400";
                 return (
                   <tr
                     key={r.userId}
@@ -56,13 +65,15 @@ export default async function ClasificacionPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      {r.completed ? "✅" : "❌"}
+                    <td className={`px-4 py-3 text-center tabular-nums font-medium ${completedColor}`}>
+                      {filled}/{total}
                     </td>
-                    <td className="px-4 py-3 text-center text-muted">{r.exact}</td>
-                    <td className="px-4 py-3 text-center text-muted">{r.results}</td>
-                    <td className="px-4 py-3 text-center text-muted">
-                      {r.bracketPoints}
+                    <td className="px-4 py-3 text-center tabular-nums text-muted">{r.exact}</td>
+                    <td className="px-4 py-3 text-center tabular-nums text-muted">{r.diff}</td>
+                    <td className="px-4 py-3 text-center tabular-nums text-muted">{r.results}</td>
+                    <td className="px-4 py-3 text-center tabular-nums text-muted">{r.miss}</td>
+                    <td className="px-4 py-3 text-center tabular-nums text-muted">
+                      {r.bracketHits.join("/")}
                     </td>
                     <td className="px-4 py-3 text-right text-lg font-extrabold text-accent">
                       {r.total}

@@ -8,6 +8,8 @@ import {
   resolveWithScores,
   BRACKET,
   ROUND_LABELS,
+  ROUND_TAB_LABELS,
+  ROUND_FULL_LABELS,
   ROUND_ORDER,
   type StandingRow,
   type ResolvedSlot,
@@ -376,7 +378,7 @@ export function PorraEditor({ data }: { data: EditorData }) {
                 : "text-muted hover:text-foreground"
             }`}
           >
-            {tab === "cuadro" ? "🗺️ Cuadro" : ROUND_LABELS[tab as keyof typeof ROUND_LABELS]}
+            {tab === "cuadro" ? "🗺️ Cuadro" : ROUND_TAB_LABELS[tab as keyof typeof ROUND_TAB_LABELS]}
           </button>
         ))}
       </div>
@@ -386,7 +388,7 @@ export function PorraEditor({ data }: { data: EditorData }) {
       ) : (
         <section className="card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-bold">{ROUND_LABELS[activeKo as keyof typeof ROUND_LABELS]}</h3>
+            <h3 className="font-bold">{ROUND_FULL_LABELS[activeKo as keyof typeof ROUND_FULL_LABELS]}</h3>
             <DeadlineBadge deadline={roundDeadlines[activeKo]} />
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
