@@ -3,7 +3,7 @@ import { POINTS } from "@/lib/scoring";
 import { ROUND_ORDER } from "@/lib/bracket";
 
 const GROUP_MATCH_COUNT = 72; // 12 groups × 6 matches
-const BRACKET_SLOT_COUNT = 31; // 16 R32 + 8 R16 + 4 QF + 2 SF + 1 F
+const BRACKET_SLOT_COUNT = 32; // 16 R32 + 8 R16 + 4 QF + 2 SF + 1 F + 1 THIRD
 const TOTAL_COUNT = GROUP_MATCH_COUNT + BRACKET_SLOT_COUNT;
 
 export type StandingRow = {

@@ -33,7 +33,7 @@ export default async function ClasificacionPage() {
                 <th className="px-4 py-3 text-center cursor-help" title="Diferencia de goles correcta (2 pts)">🔥</th>
                 <th className="px-4 py-3 text-center cursor-help" title="Resultado 1X2 correcto (1 pt)">✅</th>
                 <th className="px-4 py-3 text-center cursor-help" title="Fallos en partidos ya jugados">❌</th>
-                <th className="px-4 py-3 text-center cursor-help" title="Equipos acertados por ronda: 1/16 · 1/8 · 1/4 · 1/2 · Final">Cuadro</th>
+                <th className="px-4 py-3 text-center cursor-help" title="Equipos acertados por ronda: 1/16 · 1/8 · 1/4 · 1/2 · Final · 3º puesto">Cuadro</th>
                 <th className="px-4 py-3 text-right">Puntos</th>
               </tr>
             </thead>

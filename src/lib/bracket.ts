@@ -101,9 +101,10 @@ export type SlotRef =
   | { k: "w"; g: string } // ganador (1º) del grupo g
   | { k: "r"; g: string } // segundo (2º) del grupo g
   | { k: "t"; allowed: string[] } // tercero clasificado de uno de estos grupos
-  | { k: "m"; s: string }; // ganador del cruce con slot s
+  | { k: "m"; s: string } // ganador del cruce con slot s
+  | { k: "l"; s: string }; // perdedor del cruce con slot s (partido por 3º puesto)
 
-export type Round = "R32" | "R16" | "QF" | "SF" | "F";
+export type Round = "R32" | "R16" | "QF" | "SF" | "F" | "THIRD";
 
 export type BracketSlot = {
   slot: string; // "R32-73".."F-104"
@@ -159,6 +160,8 @@ const LATER: BracketSlot[] = [
   { slot: "SF-102", round: "SF", home: m("QF-99"), away: m("QF-100") },
   // Final (104)
   { slot: "F-104", round: "F", home: m("SF-101"), away: m("SF-102") },
+  // Tercer puesto (103): perdedores de las semifinales
+  { slot: "THIRD-103", round: "THIRD", home: { k: "l", s: "SF-101" }, away: { k: "l", s: "SF-102" } },
 ];
 
 export const BRACKET: BracketSlot[] = [...R32, ...LATER];
@@ -177,6 +180,7 @@ export const ROUND_LABELS: Record<Round, string> = {
   QF: "4os",
   SF: "Semis",
   F: "Final",
+  THIRD: "3º",
 };
 
 // Etiquetas cortas para tabs (estilo fracción)
@@ -186,6 +190,7 @@ export const ROUND_TAB_LABELS: Record<Round, string> = {
   QF: "1/4",
   SF: "1/2",
   F: "Final",
+  THIRD: "3º puesto",
 };
 
 // Etiquetas largas para títulos de sección
@@ -195,9 +200,10 @@ export const ROUND_FULL_LABELS: Record<Round, string> = {
   QF: "Cuartos",
   SF: "Semifinal",
   F: "Final",
+  THIRD: "Tercer puesto",
 };
 
-export const ROUND_ORDER: Round[] = ["R32", "R16", "QF", "SF", "F"];
+export const ROUND_ORDER: Round[] = ["R32", "R16", "QF", "SF", "F", "THIRD"];
 
 export function roundOf(slot: string): string {
   return slot.split("-")[0];
@@ -208,9 +214,10 @@ export function slotRefLabel(ref: SlotRef): string {
   if (ref.k === "w") return `1º${ref.g}`;
   if (ref.k === "r") return `2º${ref.g}`;
   if (ref.k === "t") return `3º${ref.allowed.join("/")}`;
-  // k === "m": ganador de otro cruce — calcular posición dentro de su ronda
   const round = ref.s.split("-")[0] as Round;
   const idx = BRACKET.filter((b) => b.round === round).findIndex((b) => b.slot === ref.s) + 1;
+  if (ref.k === "l") return `Per.${ROUND_TAB_LABELS[round]}#${idx}`;
+  // k === "m": ganador de otro cruce
   return `G.${ROUND_TAB_LABELS[round]}#${idx}`;
 }
 
@@ -330,6 +337,11 @@ export function resolveWithScores(
         return thirdAssignment[slot] ?? null;
       case "m":
         return winners[ref.s] ?? null;
+      case "l": {
+        const r = out[ref.s];
+        if (!r || r.winnerTeamId == null) return null;
+        return r.homeTeamId === r.winnerTeamId ? r.awayTeamId : r.homeTeamId;
+      }
     }
   };
 

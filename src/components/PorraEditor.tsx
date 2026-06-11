@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useMemo, useState } from "react";
+import { Fragment, startTransition, useActionState, useEffect, useMemo, useState } from "react";
 import { savePorraAction, type SaveState } from "@/app/porra/actions";
 import {
   computeGroupStandings,
@@ -198,7 +198,7 @@ export function PorraEditor({ data }: { data: EditorData }) {
   }
 
   const group = groups.find((g) => g.name === activeGroup) ?? groups[0];
-  const koTabs: ("cuadro" | string)[] = ["cuadro", ...ROUND_ORDER];
+  const koTabs: ("cuadro" | string)[] = ["cuadro", ...ROUND_ORDER.filter((r) => r !== "THIRD")];
 
   return (
     <div>
@@ -289,7 +289,7 @@ export function PorraEditor({ data }: { data: EditorData }) {
           {/* Clasificación + clasificados */}
           <div>
             <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-              Clasificación según tu porra
+              Clasificación
             </p>
             <table className="w-full text-sm">
               <thead className="text-xs text-muted">
@@ -318,7 +318,7 @@ export function PorraEditor({ data }: { data: EditorData }) {
 
             {/* Recuadritos de clasificados (solo los que pasan) */}
             <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-muted">
-              Clasificados según tu pronóstico
+              Clasificados
             </p>
             <div className="flex gap-2">
               {(() => {
@@ -391,21 +391,49 @@ export function PorraEditor({ data }: { data: EditorData }) {
             <h3 className="font-bold">{ROUND_FULL_LABELS[activeKo as keyof typeof ROUND_FULL_LABELS]}</h3>
             <DeadlineBadge deadline={roundDeadlines[activeKo]} />
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {BRACKET.filter((b) => b.round === activeKo).map((b) => (
-              <BracketMatch
-                key={b.slot}
-                resolved={resolved[b.slot]}
-                pick={picks[b.slot]}
-                teamsById={teamsById}
-                locked={isRoundLocked(activeKo, roundDeadlines)}
-                onScore={(side, v) =>
-                  setPicks((p) => ({ ...p, [b.slot]: { ...p[b.slot], [side]: v } }))
-                }
-                onPen={(id) => setPicks((p) => ({ ...p, [b.slot]: { ...p[b.slot], pen: id } }))}
-              />
-            ))}
-          </div>
+          {activeKo === "F" ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(["THIRD", "F"] as const).map((rnd) => {
+                const bs = BRACKET.find((b) => b.round === rnd)!;
+                return (
+                  <div key={rnd}>
+                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                      {ROUND_FULL_LABELS[rnd]}
+                    </p>
+                    <BracketMatch
+                      resolved={resolved[bs.slot]}
+                      pick={picks[bs.slot]}
+                      teamsById={teamsById}
+                      locked={isRoundLocked(rnd, roundDeadlines)}
+                      winnerLabel={rnd === "F" ? "🏆 campeón" : "🥉 tercero"}
+                      onScore={(side, v) =>
+                        setPicks((p) => ({ ...p, [bs.slot]: { ...p[bs.slot], [side]: v } }))
+                      }
+                      onPen={(id) =>
+                        setPicks((p) => ({ ...p, [bs.slot]: { ...p[bs.slot], pen: id } }))
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {BRACKET.filter((b) => b.round === activeKo).map((b) => (
+                <BracketMatch
+                  key={b.slot}
+                  resolved={resolved[b.slot]}
+                  pick={picks[b.slot]}
+                  teamsById={teamsById}
+                  locked={isRoundLocked(activeKo, roundDeadlines)}
+                  onScore={(side, v) =>
+                    setPicks((p) => ({ ...p, [b.slot]: { ...p[b.slot], [side]: v } }))
+                  }
+                  onPen={(id) => setPicks((p) => ({ ...p, [b.slot]: { ...p[b.slot], pen: id } }))}
+                />
+              ))}
+            </div>
+          )}
         </section>
       )}
 
@@ -489,12 +517,10 @@ function BracketColumn({
   teamsById: Record<number, TeamLite>;
 }) {
   return (
-    <div className="flex min-w-12 flex-col">
+    <div className="flex flex-1 min-w-14 flex-col">
       <p className="mb-1 text-center text-[10px] font-semibold uppercase tracking-wide text-muted">
         {ROUND_LABELS[round]}
       </p>
-      {/* Cada celda ocupa una fracción igual de la altura y se centra dentro de ella:
-          así cada cruce queda en el punto medio de los dos que lo definen. */}
       <div className="flex flex-1 flex-col">
         {slots.map((slot) => (
           <div key={slot} className="flex flex-1 items-center justify-center px-0.5">
@@ -502,6 +528,76 @@ function BracketColumn({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Líneas SVG que conectan dos columnas adyacentes del cuadro.
+// count = nº de celdas en el lado con MÁS celdas.
+// type "converge": izquierda tiene más, pares convergen a la derecha.
+// type "diverge": derecha tiene más, izquierda diverge hacia la derecha.
+function BracketConnector({ count, type }: { count: number; type: "converge" | "diverge" }) {
+  const lp = { stroke: "currentColor", strokeWidth: "2", fill: "none", vectorEffect: "non-scaling-stroke" } as const;
+
+  if (count === 1) {
+    return (
+      <div className="relative self-stretch text-border/50" style={{ width: 20, minWidth: 20 }}>
+        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <line {...lp} x1="0" y1="50" x2="100" y2="50" />
+        </svg>
+      </div>
+    );
+  }
+
+  const pairs = count / 2;
+  const lines: React.ReactNode[] = [];
+  for (let k = 0; k < pairs; k++) {
+    const topY = ((4 * k + 1) / (2 * count)) * 100;
+    const botY = ((4 * k + 3) / (2 * count)) * 100;
+    const midY = ((4 * k + 2) / (2 * count)) * 100;
+    if (type === "converge") {
+      lines.push(
+        <line key={`${k}a`} {...lp} x1="0"   y1={topY} x2="50"  y2={topY} />,
+        <line key={`${k}b`} {...lp} x1="0"   y1={botY} x2="50"  y2={botY} />,
+        <line key={`${k}c`} {...lp} x1="50"  y1={topY} x2="50"  y2={botY} />,
+        <line key={`${k}d`} {...lp} x1="50"  y1={midY} x2="100" y2={midY} />,
+      );
+    } else {
+      lines.push(
+        <line key={`${k}a`} {...lp} x1="0"   y1={midY} x2="50"  y2={midY} />,
+        <line key={`${k}b`} {...lp} x1="50"  y1={topY} x2="50"  y2={botY} />,
+        <line key={`${k}c`} {...lp} x1="50"  y1={topY} x2="100" y2={topY} />,
+        <line key={`${k}d`} {...lp} x1="50"  y1={botY} x2="100" y2={botY} />,
+      );
+    }
+  }
+
+  return (
+    <div className="relative self-stretch text-border/50" style={{ width: 20, minWidth: 20 }}>
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+        {lines}
+      </svg>
+    </div>
+  );
+}
+
+function loserTeam(
+  resolved: Record<string, ResolvedSlot>,
+  teamsById: Record<number, TeamLite>,
+  slot: string,
+): TeamLite | undefined {
+  const r = resolved[slot];
+  if (!r || r.winnerTeamId == null) return undefined;
+  const loserId = r.homeTeamId === r.winnerTeamId ? r.awayTeamId : r.homeTeamId;
+  return loserId != null ? teamsById[loserId] : undefined;
+}
+
+function PodiumSlot({ medal, label, team }: { medal: string; label: string; team?: TeamLite }) {
+  return (
+    <div className="flex flex-col items-center rounded-md border border-border bg-surface-2/60 px-3 py-2 text-center">
+      <span className="text-xs text-muted">{medal} {label}</span>
+      <span className="mt-1 text-3xl">{team?.flag ?? "—"}</span>
+      <span className="mt-0.5 max-w-full truncate text-xs">{team?.name ?? "—"}</span>
     </div>
   );
 }
@@ -516,45 +612,69 @@ function BracketDiagram({
   teamsById: Record<number, TeamLite>;
   champion?: TeamLite;
 }) {
+  const runnerUp     = loserTeam(resolved, teamsById, "F-104");
+  const thirdWinner  = resolved["THIRD-103"]?.winnerTeamId
+    ? teamsById[resolved["THIRD-103"].winnerTeamId]
+    : undefined;
+  const third1 = loserTeam(resolved, teamsById, "SF-101");
+  const third2 = loserTeam(resolved, teamsById, "SF-102");
+
   return (
     <div className="card overflow-x-auto p-4">
-      <div className="flex min-h-[28rem] min-w-max items-stretch justify-center gap-1">
-        {/* Mitad izquierda */}
-        {SIDE_ROUNDS.map((round) => (
-          <BracketColumn
-            key={`l-${round}`}
-            round={round}
-            slots={LEFT_ORDER[round] ?? []}
-            resolved={resolved}
-            teamsById={teamsById}
-          />
-        ))}
+      {/* Diagrama de bracket */}
+      <div className="flex min-h-[28rem] w-full min-w-max items-stretch">
+        {/* Mitad izquierda con conectores */}
+        {SIDE_ROUNDS.map((round) => {
+          const slots = LEFT_ORDER[round] ?? [];
+          return (
+            <Fragment key={`l-${round}`}>
+              <BracketColumn round={round} slots={slots} resolved={resolved} teamsById={teamsById} />
+              <BracketConnector count={slots.length} type="converge" />
+            </Fragment>
+          );
+        })}
 
-        {/* Centro: final + campeón */}
-        <div className="flex min-w-24 flex-col px-1">
+        {/* Centro: solo la final, sin caja de campeón */}
+        <div className="flex min-w-20 flex-col px-1">
           <p className="mb-1 text-center text-[10px] font-semibold uppercase tracking-wide text-accent">
             Final
           </p>
-          <div className="flex flex-1 flex-col items-center justify-center gap-2">
+          <div className="flex flex-1 items-center justify-center">
             <BracketCell r={resolved["F-104"]} teamsById={teamsById} />
-            <span className="mt-2 text-[10px] uppercase tracking-wide text-muted">Campeón</span>
-            <div className="flex flex-col items-center rounded-md border border-accent/50 bg-accent/10 px-3 py-2">
-              <span className="text-3xl">{champion?.flag ?? "🏆"}</span>
-              <span className="mt-1 max-w-24 truncate text-xs">{champion?.name ?? "—"}</span>
-            </div>
           </div>
         </div>
 
-        {/* Mitad derecha (rondas en orden inverso) */}
-        {[...SIDE_ROUNDS].reverse().map((round) => (
-          <BracketColumn
-            key={`r-${round}`}
-            round={round}
-            slots={RIGHT_ORDER[round] ?? []}
-            resolved={resolved}
-            teamsById={teamsById}
-          />
-        ))}
+        {/* Mitad derecha con conectores */}
+        {[...SIDE_ROUNDS].reverse().map((round) => {
+          const slots = RIGHT_ORDER[round] ?? [];
+          return (
+            <Fragment key={`r-${round}`}>
+              <BracketConnector count={slots.length} type="diverge" />
+              <BracketColumn round={round} slots={slots} resolved={resolved} teamsById={teamsById} />
+            </Fragment>
+          );
+        })}
+      </div>
+
+      {/* Podio: campeón · subcampeón · partido por el 3er puesto */}
+      <div className="mt-4 grid grid-cols-3 gap-3 border-t border-border pt-4">
+        <PodiumSlot medal="🥇" label="Campeón" team={champion} />
+        <PodiumSlot medal="🥈" label="Subcampeón" team={runnerUp} />
+        {thirdWinner ? (
+          <PodiumSlot medal="🥉" label="Tercer puesto" team={thirdWinner} />
+        ) : (
+          <div className="flex flex-col items-center rounded-md border border-border bg-surface-2/60 px-3 py-2 text-center">
+            <span className="text-xs text-muted">🥉 Tercer puesto</span>
+            <div className="mt-1 flex items-center gap-1.5 text-base">
+              <span title={third1?.name}>{third1?.flag ?? "·"}</span>
+              <span className="text-xs text-muted">vs</span>
+              <span title={third2?.name}>{third2?.flag ?? "·"}</span>
+            </div>
+            <span className="mt-0.5 max-w-full truncate text-xs text-muted">
+              {third1 && third2 ? `${third1.name} · ${third2.name}` : "—"}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -565,6 +685,7 @@ function BracketMatch({
   pick,
   teamsById,
   locked,
+  winnerLabel = "✓ pasa",
   onScore,
   onPen,
 }: {
@@ -572,6 +693,7 @@ function BracketMatch({
   pick?: { home: string; away: string; pen: number | null };
   teamsById: Record<number, TeamLite>;
   locked: boolean;
+  winnerLabel?: string;
   onScore: (side: "home" | "away", v: string) => void;
   onPen: (teamId: number) => void;
 }) {
@@ -619,7 +741,7 @@ function BracketMatch({
 
       {winner && (
         <p className="mt-1.5 text-center text-xs text-green-300">
-          ✓ pasa {winner.flag} {winner.name}
+          {winnerLabel} {winner.flag} {winner.name}
         </p>
       )}
     </div>

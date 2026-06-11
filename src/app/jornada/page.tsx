@@ -35,7 +35,7 @@ const TABS: TabDef[] = [
   { kind: "ko", key: "r16", label: ROUND_TAB_LABELS.R16, dbStage: "R16",   round: "R16" },
   { kind: "ko", key: "qf",  label: ROUND_TAB_LABELS.QF,  dbStage: "QF",    round: "QF"  },
   { kind: "ko", key: "sf",  label: ROUND_TAB_LABELS.SF,  dbStage: "SF",    round: "SF"  },
-  { kind: "ko", key: "f",   label: ROUND_TAB_LABELS.F,   dbStage: "FINAL", round: "F"   },
+  { kind: "ko", key: "f", label: ROUND_TAB_LABELS.F, dbStage: "FINAL", round: "F" },
 ];
 
 export default async function JornadaPage({
@@ -168,15 +168,20 @@ export default async function JornadaPage({
   // ─── Eliminatorias ────────────────────────────────────────────────────────
   const { dbStage, round } = tab;
 
-  // Matches de BD (ordenados por id = mismo orden que los slots del bracket)
+  // Para el tab de Final incluimos también el partido por el 3er puesto (antes del final)
+  const isFinalsTab = round === "F";
+  const stages = isFinalsTab ? (["THIRD", "FINAL"] as Stage[]) : [dbStage];
+
   const matches = await prisma.match.findMany({
-    where: { stage: dbStage },
-    orderBy: { id: "asc" },
+    where: { stage: { in: stages } },
+    orderBy: { kickoff: "asc" }, // THIRD se juega antes que la Final
     include: { homeTeam: true, awayTeam: true },
   });
 
-  // Slots del bracket para esta ronda (mismo orden)
-  const bracketSlots = BRACKET.filter((b) => b.round === round);
+  // Slots del bracket en el mismo orden que los matches (THIRD primero si aplica)
+  const bracketSlots = isFinalsTab
+    ? [...BRACKET.filter((b) => b.round === "THIRD"), ...BRACKET.filter((b) => b.round === "F")]
+    : BRACKET.filter((b) => b.round === round);
 
   // Todos los picks de todos los usuarios para estos slots
   const slotNames = bracketSlots.map((b) => b.slot);
@@ -231,7 +236,7 @@ export default async function JornadaPage({
           return (
             <KnockoutJornadaCard
               key={m.id}
-              label={ROUND_FULL_LABELS[round]}
+              label={ROUND_FULL_LABELS[bs.round]}
               kickoffISO={m.kickoff.toISOString()}
               home={homeTeam}
               away={awayTeam}

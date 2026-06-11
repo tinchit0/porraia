@@ -24,7 +24,7 @@ export default async function PorraPage() {
     prisma.prediction.findMany({ where: { userId: user.id } }),
     prisma.bracketPick.findMany({ where: { userId: user.id } }),
     prisma.match.findMany({
-      where: { stage: { in: ["R32", "R16", "QF", "SF", "FINAL"] } },
+      where: { stage: { in: ["R32", "R16", "QF", "SF", "FINAL", "THIRD"] } },
       select: { stage: true, kickoff: true },
       orderBy: { kickoff: "asc" },
     }),
@@ -34,7 +34,7 @@ export default async function PorraPage() {
   for (const g of groups)
     for (const t of g.teams) teamsById[t.id] = { id: t.id, name: t.name, flag: t.flag };
 
-  const stageToRound: Record<string, string> = { R32: "R32", R16: "R16", QF: "QF", SF: "SF", FINAL: "F" };
+  const stageToRound: Record<string, string> = { R32: "R32", R16: "R16", QF: "QF", SF: "SF", FINAL: "F", THIRD: "THIRD" };
   const roundDeadlines: Record<string, string> = {};
   for (const m of knockoutMatches) {
     const round = stageToRound[m.stage];

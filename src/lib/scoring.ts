@@ -17,11 +17,12 @@ export const POINTS = {
  * Clave = ronda del cruce que se gana (prefijo del slot: R32, R16, QF, SF, F).
  */
 export const KNOCKOUT_POINTS: Record<string, number> = {
-  R32: 1, // ganar dieciseisavos → llegar a octavos
-  R16: 2, // ganar octavos → llegar a cuartos
-  QF: 4, // ganar cuartos → llegar a semis
-  SF: 6, // ganar semis → llegar a la final
-  F: 10, // ganar la final → campeón
+  R32: 1,    // ganar dieciseisavos → llegar a octavos
+  R16: 2,    // ganar octavos → llegar a cuartos
+  QF: 4,     // ganar cuartos → llegar a semis
+  SF: 6,     // ganar semis → llegar a la final
+  F: 10,     // ganar la final → campeón
+  THIRD: 1,  // ganar el partido por el 3er puesto
 };
 
 export type Outcome = "HOME" | "DRAW" | "AWAY";

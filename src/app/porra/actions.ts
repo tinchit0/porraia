@@ -51,12 +51,12 @@ export async function savePorraAction(
 
   // Primer pitido por ronda de eliminatorias
   const knockoutMatches = await prisma.match.findMany({
-    where: { stage: { in: ["R32", "R16", "QF", "SF", "FINAL"] } },
+    where: { stage: { in: ["R32", "R16", "QF", "SF", "FINAL", "THIRD"] } },
     select: { stage: true, kickoff: true },
     orderBy: { kickoff: "asc" },
   });
   const stageToRound: Record<string, string> = {
-    R32: "R32", R16: "R16", QF: "QF", SF: "SF", FINAL: "F",
+    R32: "R32", R16: "R16", QF: "QF", SF: "SF", FINAL: "F", THIRD: "THIRD",
   };
   const roundDeadline: Record<string, Date> = {};
   for (const m of knockoutMatches) {

@@ -31,9 +31,9 @@ export default function NormasPage() {
             rellena cada cruce (si hay empate, eliges quién pasa por penaltis) hasta la final.
           </li>
           <li>
-            Puedes editar tu porra todas las veces que quieras{" "}
-            <strong className="text-foreground">hasta el pitido inicial del Mundial</strong>.
-            A partir de ese momento queda bloqueada.
+            Puedes editar tu porra mientras los partidos no hayan empezado:{" "}
+            <strong className="text-foreground">cada partido de grupos se bloquea en su pitido inicial</strong>,
+            y cada ronda de eliminatorias se bloquea cuando arranca su primer partido.
           </li>
         </ul>
       </section>
@@ -89,6 +89,10 @@ export default function NormasPage() {
             <div className="flex items-center justify-between rounded-lg bg-surface-2 px-4 py-3">
               <span>🏆 Campeón</span>
               <span className="badge bg-primary text-primary-fg">+{KNOCKOUT_POINTS.F}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-surface-2 px-4 py-3">
+              <span>🥉 3er puesto</span>
+              <span className="badge bg-accent/30 text-accent">+{KNOCKOUT_POINTS.THIRD}</span>
             </div>
           </div>
         </div>
