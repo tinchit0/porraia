@@ -203,6 +203,17 @@ export function roundOf(slot: string): string {
   return slot.split("-")[0];
 }
 
+/** Texto placeholder para un SlotRef cuando los equipos aún no están determinados. */
+export function slotRefLabel(ref: SlotRef): string {
+  if (ref.k === "w") return `1º${ref.g}`;
+  if (ref.k === "r") return `2º${ref.g}`;
+  if (ref.k === "t") return `3º${ref.allowed.join("/")}`;
+  // k === "m": ganador de otro cruce — calcular posición dentro de su ronda
+  const round = ref.s.split("-")[0] as Round;
+  const idx = BRACKET.filter((b) => b.round === round).findIndex((b) => b.slot === ref.s) + 1;
+  return `G.${ROUND_TAB_LABELS[round]}#${idx}`;
+}
+
 // ---------------------------------------------------------------------------
 // Reparto de terceros (emparejamiento bipartito respetando los grupos admitidos)
 // ---------------------------------------------------------------------------
