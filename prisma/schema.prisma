@@ -1,0 +1,144 @@
+// Porra Mundial 2026 — esquema de datos
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Stage {
+  GROUP
+  R32
+  R16
+  QF
+  SF
+  THIRD
+  FINAL
+}
+
+enum MatchStatus {
+  SCHEDULED
+  FINISHED
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String
+  passwordHash String
+  role         Role         @default(USER)
+  createdAt    DateTime     @default(now())
+  predictions  Prediction[]
+  globalBet    GlobalBet?
+  bracketPicks BracketPick[]
+}
+
+model Group {
+  id      Int     @id @default(autoincrement())
+  name    String  @unique // "A".."L"
+  teams   Team[]
+  matches Match[]
+}
+
+model Team {
+  id      Int    @id @default(autoincrement())
+  name    String
+  code    String @unique // 3 letras, p.ej. "ESP"
+  flag    String // emoji bandera
+  groupId Int?
+  group   Group? @relation(fields: [groupId], references: [id])
+
+  homeMatches Match[] @relation("HomeTeam")
+  awayMatches Match[] @relation("AwayTeam")
+
+  championBets GlobalBet[] @relation("Champion")
+  runnerUpBets GlobalBet[] @relation("RunnerUp")
+}
+
+model Match {
+  id         Int         @id @default(autoincrement())
+  stage      Stage
+  label      String? // etiqueta de ronda, p.ej. "Octavos 1"
+  matchday   Int? // jornada dentro de fase de grupos (1..3)
+  groupId    Int?
+  group      Group?      @relation(fields: [groupId], references: [id])
+  homeTeamId Int?
+  homeTeam   Team?       @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeamId Int?
+  awayTeam   Team?       @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  kickoff    DateTime
+  homeScore  Int?
+  awayScore  Int?
+  status     MatchStatus @default(SCHEDULED)
+
+  predictions Prediction[]
+}
+
+model Prediction {
+  id        Int    @id @default(autoincrement())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchId   Int
+  match     Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  homeScore Int
+  awayScore Int
+  points    Int    @default(0) // cache de puntos obtenidos
+
+  @@unique([userId, matchId])
+}
+
+model GlobalBet {
+  id             Int    @id @default(autoincrement())
+  userId         String @unique
+  user           User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  championTeamId Int?
+  championTeam   Team?  @relation("Champion", fields: [championTeamId], references: [id])
+  runnerUpTeamId Int?
+  runnerUpTeam   Team?  @relation("RunnerUp", fields: [runnerUpTeamId], references: [id])
+  topScorer      String @default("")
+  points         Int    @default(0) // cache de puntos obtenidos
+}
+
+// Predicción del cuadro de eliminatorias de un usuario (un registro por cruce).
+// El ganador (winnerTeamId) es el equipo que el usuario predice que avanza;
+// en caso de empate, es el ganador en la tanda de penaltis.
+model BracketPick {
+  id           Int    @id @default(autoincrement())
+  userId       String
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot         String // "R32-1".."F-1"
+  homeScore    Int?
+  awayScore    Int?
+  winnerTeamId Int?
+  points       Int    @default(0) // cache de puntos obtenidos
+
+  @@unique([userId, slot])
+}
+
+// Resultado real de cada cruce de eliminatorias (lo fija el admin).
+model RealKnockout {
+  slot         String @id
+  homeScore    Int?
+  awayScore    Int?
+  winnerTeamId Int?
+}
+
+// Fila única de configuración del torneo
+model Settings {
+  id             Int      @id @default(1)
+  tournamentName String   @default("Mundial 2026")
+  lockAt         DateTime // instante de bloqueo de edición (primer pitido inicial)
+  // Resultados finales del torneo (los fija el admin) para puntuar apuestas globales
+  championTeamId Int?
+  runnerUpTeamId Int?
+  topScorer      String   @default("")
+}
