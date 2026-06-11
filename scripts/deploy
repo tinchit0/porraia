@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${DEPLOY_HOST:?DEPLOY_HOST not set}"
+: "${DEPLOY_PATH:?DEPLOY_PATH not set}"
+
+echo "▶ Building Docker image..."
+docker build -t porraia .
+
+echo "▶ Transferring image to $DEPLOY_HOST..."
+docker save porraia | ssh "$DEPLOY_HOST" "docker load"
+
+echo "▶ Copying compose.yaml..."
+scp compose.yaml "$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml"
+
+echo "▶ Starting service..."
+ssh "$DEPLOY_HOST" "cd $DEPLOY_PATH && docker compose up -d --remove-orphans --force-recreate"
+
+echo "✓ Deployed."
