@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { scoreMatchPrediction } from "@/lib/scoring";
+import { JornadaMatchCard, type ParticipantPred } from "@/components/JornadaMatchCard";
 import type { Stage } from "@/generated/prisma/enums";
 
 export const dynamic = "force-dynamic";
@@ -41,10 +42,34 @@ export default async function JornadaPage({
     include: { homeTeam: true, awayTeam: true, group: true },
   });
 
-  const preds = await prisma.prediction.findMany({
-    where: { userId: user.id, matchId: { in: matches.map((m) => m.id) } },
-  });
+  const now = new Date();
+  const lockedMatchIds = matches.filter((m) => m.kickoff <= now).map((m) => m.id);
+
+  const [preds, allPredsRaw] = await Promise.all([
+    prisma.prediction.findMany({
+      where: { userId: user.id, matchId: { in: matches.map((m) => m.id) } },
+    }),
+    lockedMatchIds.length > 0
+      ? prisma.prediction.findMany({
+          where: { matchId: { in: lockedMatchIds } },
+          select: {
+            matchId: true,
+            homeScore: true,
+            awayScore: true,
+            user: { select: { name: true } },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
   const predByMatch = new Map(preds.map((p) => [p.matchId, p]));
+
+  const allPredsByMatch = new Map<number, ParticipantPred[]>();
+  for (const p of allPredsRaw) {
+    const arr = allPredsByMatch.get(p.matchId) ?? [];
+    arr.push({ name: p.user.name, homeScore: p.homeScore, awayScore: p.awayScore });
+    allPredsByMatch.set(p.matchId, arr);
+  }
 
   const roundPoints = matches.reduce((s, m) => {
     const p = predByMatch.get(m.id);
@@ -89,56 +114,71 @@ export default async function JornadaPage({
           const played = m.homeScore != null && m.awayScore != null;
           const pred = predByMatch.get(m.id);
           const pts = pred ? scoreMatchPrediction(pred, m) : 0;
+          const locked = m.kickoff <= now;
+          const allPreds = allPredsByMatch.get(m.id) ?? [];
           return (
-            <div key={m.id} className="card flex items-center gap-3 p-3 sm:p-4">
-              <div className="w-20 shrink-0 text-xs text-muted">
-                {m.group ? `Grupo ${m.group.name}` : m.label}
-                <div>{fmtDate(m.kickoff)}</div>
-              </div>
+            <JornadaMatchCard
+              key={m.id}
+              locked={locked}
+              allPreds={allPreds}
+              realHome={m.homeScore ?? null}
+              realAway={m.awayScore ?? null}
+            >
+              <div className="card flex items-center gap-3 p-3 sm:p-4">
+                <div className="w-20 shrink-0 text-xs text-muted">
+                  {m.group ? `Grupo ${m.group.name}` : m.label}
+                  <div>{fmtDate(m.kickoff)}</div>
+                  {locked && allPreds.length > 0 && (
+                    <div className="mt-0.5 text-[10px] text-muted/60">
+                      👥 {allPreds.length}
+                    </div>
+                  )}
+                </div>
 
-              <div className="flex flex-1 items-center justify-center gap-3">
-                <span className="flex flex-1 items-center justify-end gap-2 text-right text-sm font-medium">
-                  <span className="truncate">{m.homeTeam?.name ?? "Por definir"}</span>
-                  <span className="text-lg">{m.homeTeam?.flag}</span>
-                </span>
-                <span className="min-w-16 text-center text-lg font-extrabold tabular-nums">
-                  {played ? `${m.homeScore} - ${m.awayScore}` : "— : —"}
-                </span>
-                <span className="flex flex-1 items-center gap-2 text-sm font-medium">
-                  <span className="text-lg">{m.awayTeam?.flag}</span>
-                  <span className="truncate">{m.awayTeam?.name ?? "Por definir"}</span>
-                </span>
-              </div>
+                <div className="flex flex-1 items-center justify-center gap-3">
+                  <span className="flex flex-1 items-center justify-end gap-2 text-right text-sm font-medium">
+                    <span className="truncate">{m.homeTeam?.name ?? "Por definir"}</span>
+                    <span className="text-lg">{m.homeTeam?.flag}</span>
+                  </span>
+                  <span className="min-w-16 text-center text-lg font-extrabold tabular-nums">
+                    {played ? `${m.homeScore} - ${m.awayScore}` : "— : —"}
+                  </span>
+                  <span className="flex flex-1 items-center gap-2 text-sm font-medium">
+                    <span className="text-lg">{m.awayTeam?.flag}</span>
+                    <span className="truncate">{m.awayTeam?.name ?? "Por definir"}</span>
+                  </span>
+                </div>
 
-              <div className="w-24 shrink-0 text-right text-xs">
-                {round.stage === "GROUP" ? (
-                  pred ? (
-                    <>
-                      <div className="text-muted">
-                        Tú: {pred.homeScore}-{pred.awayScore}
-                      </div>
-                      {played && (
-                        <span
-                          className={`badge mt-1 ${
-                            pts === 3
-                              ? "bg-primary text-primary-fg"
-                              : pts === 1
-                                ? "bg-accent/30 text-accent"
-                                : "bg-surface-2 text-muted"
-                          }`}
-                        >
-                          +{pts}
-                        </span>
-                      )}
-                    </>
+                <div className="w-24 shrink-0 text-right text-xs">
+                  {round.stage === "GROUP" ? (
+                    pred ? (
+                      <>
+                        <div className="text-muted">
+                          Tú: {pred.homeScore}-{pred.awayScore}
+                        </div>
+                        {played && (
+                          <span
+                            className={`badge mt-1 ${
+                              pts === 3
+                                ? "bg-primary text-primary-fg"
+                                : pts === 1
+                                  ? "bg-accent/30 text-accent"
+                                  : "bg-surface-2 text-muted"
+                            }`}
+                          >
+                            +{pts}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-muted">Sin pronóstico</span>
+                    )
                   ) : (
-                    <span className="text-muted">Sin pronóstico</span>
-                  )
-                ) : (
-                  <span className="text-muted">—</span>
-                )}
+                    <span className="text-muted">—</span>
+                  )}
+                </div>
               </div>
-            </div>
+            </JornadaMatchCard>
           );
         })}
       </div>
