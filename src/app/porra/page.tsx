@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
-import { getLockAt, isLocked } from "@/lib/lock";
-import { Countdown } from "@/components/Countdown";
 import { PorraEditor, type EditorData, type TeamLite } from "@/components/PorraEditor";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +9,7 @@ export default async function PorraPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?callbackUrl=/porra");
 
-  const [groups, preds, picks, lockAt, locked, knockoutMatches] = await Promise.all([
+  const [groups, preds, picks, knockoutMatches] = await Promise.all([
     prisma.group.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -25,8 +23,6 @@ export default async function PorraPage() {
     }),
     prisma.prediction.findMany({ where: { userId: user.id } }),
     prisma.bracketPick.findMany({ where: { userId: user.id } }),
-    getLockAt(),
-    isLocked(),
     prisma.match.findMany({
       where: { stage: { in: ["R32", "R16", "QF", "SF", "FINAL"] } },
       select: { stage: true, kickoff: true },
@@ -69,27 +65,10 @@ export default async function PorraPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold">Mi porra</h1>
-          <p className="mt-1 text-muted">
-            Marcadores de la fase de grupos y cuadro de eliminatorias.
-          </p>
-        </div>
-        <Countdown lockAtISO={lockAt.toISOString()} />
-      </div>
-
-      {locked ? (
-        <p className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-          ⚽ El Mundial ya está en marcha. Puedes seguir editando los partidos que aún no hayan empezado.
-        </p>
-      ) : (
-        <p className="mb-6 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-muted">
-          Puedes editar tu porra cuantas veces quieras hasta el pitido inicial de cada partido. ¡No olvides
-          guardar!
-        </p>
-      )}
-
+      <h1 className="mb-1 text-3xl font-extrabold">Mi porra</h1>
+      <p className="mb-6 text-muted">
+        Marcadores de la fase de grupos y cuadro de eliminatorias.
+      </p>
       <PorraEditor data={data} />
     </div>
   );
