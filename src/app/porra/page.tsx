@@ -11,7 +11,7 @@ export default async function PorraPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?callbackUrl=/porra");
 
-  const [groups, preds, picks, lockAt, locked] = await Promise.all([
+  const [groups, preds, picks, lockAt, locked, knockoutMatches] = await Promise.all([
     prisma.group.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -19,7 +19,7 @@ export default async function PorraPage() {
         matches: {
           where: { stage: "GROUP" },
           orderBy: [{ matchday: "asc" }, { kickoff: "asc" }],
-          select: { id: true, matchday: true, homeTeamId: true, awayTeamId: true },
+          select: { id: true, matchday: true, homeTeamId: true, awayTeamId: true, kickoff: true },
         },
       },
     }),
@@ -27,11 +27,23 @@ export default async function PorraPage() {
     prisma.bracketPick.findMany({ where: { userId: user.id } }),
     getLockAt(),
     isLocked(),
+    prisma.match.findMany({
+      where: { stage: { in: ["R32", "R16", "QF", "SF", "FINAL"] } },
+      select: { stage: true, kickoff: true },
+      orderBy: { kickoff: "asc" },
+    }),
   ]);
 
   const teamsById: Record<number, TeamLite> = {};
   for (const g of groups)
     for (const t of g.teams) teamsById[t.id] = { id: t.id, name: t.name, flag: t.flag };
+
+  const stageToRound: Record<string, string> = { R32: "R32", R16: "R16", QF: "QF", SF: "SF", FINAL: "F" };
+  const roundDeadlines: Record<string, string> = {};
+  for (const m of knockoutMatches) {
+    const round = stageToRound[m.stage];
+    if (round && !(round in roundDeadlines)) roundDeadlines[round] = m.kickoff.toISOString();
+  }
 
   const data: EditorData = {
     groups: groups.map((g) => ({
@@ -42,6 +54,7 @@ export default async function PorraPage() {
         matchday: m.matchday ?? 1,
         homeId: m.homeTeamId ?? 0,
         awayId: m.awayTeamId ?? 0,
+        kickoff: m.kickoff.toISOString(),
       })),
     })),
     teamsById,
@@ -51,7 +64,7 @@ export default async function PorraPage() {
     bracketPicks: Object.fromEntries(
       picks.map((p) => [p.slot, { home: p.homeScore, away: p.awayScore }])
     ),
-    locked,
+    roundDeadlines,
   };
 
   return (
@@ -67,12 +80,12 @@ export default async function PorraPage() {
       </div>
 
       {locked ? (
-        <p className="mb-6 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
-          🔒 El Mundial ya ha comenzado: tu porra está bloqueada y no se puede editar.
+        <p className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          ⚽ El Mundial ya está en marcha. Puedes seguir editando los partidos que aún no hayan empezado.
         </p>
       ) : (
         <p className="mb-6 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-muted">
-          Puedes editar tu porra cuantas veces quieras hasta el pitido inicial. ¡No olvides
+          Puedes editar tu porra cuantas veces quieras hasta el pitido inicial de cada partido. ¡No olvides
           guardar!
         </p>
       )}

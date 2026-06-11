@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
-import { isLocked } from "@/lib/lock";
 import { BRACKET } from "@/lib/bracket";
 
 export type SaveState = { ok?: boolean; error?: string } | undefined;
@@ -21,20 +20,22 @@ export async function savePorraAction(
 ): Promise<SaveState> {
   const user = await getCurrentUser();
   if (!user) return { error: "Debes iniciar sesión." };
-  if (await isLocked()) return { error: "La porra ya está bloqueada." };
 
+  const now = new Date();
+
+  // Predicciones de la fase de grupos — solo partidos que aún no hayan empezado
   const matches = await prisma.match.findMany({
     where: { stage: "GROUP" },
-    select: { id: true },
+    select: { id: true, kickoff: true },
   });
 
-  // Predicciones de marcador de la fase de grupos
   for (const m of matches) {
+    if (m.kickoff <= now) continue;
+
     const home = parseScore(formData.get(`m_${m.id}_home`));
     const away = parseScore(formData.get(`m_${m.id}_away`));
 
     if (home == null || away == null) {
-      // Si la predicción está incompleta o vacía, la eliminamos (si existía).
       await prisma.prediction.deleteMany({
         where: { userId: user.id, matchId: m.id },
       });
@@ -48,8 +49,26 @@ export async function savePorraAction(
     });
   }
 
-  // Cuadro de eliminatorias
+  // Primer pitido por ronda de eliminatorias
+  const knockoutMatches = await prisma.match.findMany({
+    where: { stage: { in: ["R32", "R16", "QF", "SF", "FINAL"] } },
+    select: { stage: true, kickoff: true },
+    orderBy: { kickoff: "asc" },
+  });
+  const stageToRound: Record<string, string> = {
+    R32: "R32", R16: "R16", QF: "QF", SF: "SF", FINAL: "F",
+  };
+  const roundDeadline: Record<string, Date> = {};
+  for (const m of knockoutMatches) {
+    const round = stageToRound[m.stage];
+    if (round && !(round in roundDeadline)) roundDeadline[round] = m.kickoff;
+  }
+
+  // Cuadro de eliminatorias — solo rondas cuyo primer partido aún no haya empezado
   for (const bs of BRACKET) {
+    const deadline = roundDeadline[bs.round];
+    if (deadline && deadline <= now) continue;
+
     const home = parseScore(formData.get(`k_${bs.slot}_home`));
     const away = parseScore(formData.get(`k_${bs.slot}_away`));
     const winRaw = formData.get(`k_${bs.slot}_win`);

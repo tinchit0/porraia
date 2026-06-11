@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useMemo, useState } from "react";
+import { startTransition, useActionState, useEffect, useMemo, useState } from "react";
 import { savePorraAction, type SaveState } from "@/app/porra/actions";
 import {
   computeGroupStandings,
@@ -15,7 +15,7 @@ import {
 } from "@/lib/bracket";
 
 export type TeamLite = { id: number; name: string; flag: string };
-export type MatchLite = { id: number; matchday: number; homeId: number; awayId: number };
+export type MatchLite = { id: number; matchday: number; homeId: number; awayId: number; kickoff: string };
 export type GroupBlock = { name: string; teams: TeamLite[]; matches: MatchLite[] };
 
 export type EditorData = {
@@ -23,7 +23,7 @@ export type EditorData = {
   teamsById: Record<number, TeamLite>;
   predictions: Record<number, { home: number; away: number }>;
   bracketPicks: Record<string, { home: number | null; away: number | null }>;
-  locked: boolean;
+  roundDeadlines: Record<string, string>; // round → ISO kickoff del primer partido
 };
 
 type Scores = Record<number, { home: string; away: string }>;
@@ -36,6 +36,31 @@ const toInt = (s: string): number | null => {
   const n = Number(s);
   return Number.isInteger(n) && n >= 0 && n <= 99 ? n : null;
 };
+
+const fmtKickoff = (iso: string) =>
+  new Date(iso).toLocaleString("es-ES", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+const isMatchLocked = (kickoff: string) => new Date(kickoff) <= new Date();
+const isRoundLocked = (round: string, deadlines: Record<string, string>) => {
+  const d = deadlines[round];
+  return d ? new Date(d) <= new Date() : false;
+};
+
+function DeadlineBadge({ deadline }: { deadline?: string }) {
+  const [label, setLabel] = useState<string | null>(null);
+  useEffect(() => {
+    if (!deadline) return;
+    const locked = new Date(deadline) <= new Date();
+    setLabel(locked ? "🔒 Ronda iniciada" : `⏰ Plazo: ${fmtKickoff(deadline)}`);
+  }, [deadline]);
+  if (!label) return null;
+  return <span className="text-xs text-muted">{label}</span>;
+}
 
 function ScoreBox({
   value,
@@ -73,7 +98,7 @@ function TeamTag({ team, align }: { team?: TeamLite; align: "l" | "r" }) {
 }
 
 export function PorraEditor({ data }: { data: EditorData }) {
-  const { groups, teamsById, predictions, bracketPicks, locked } = data;
+  const { groups, teamsById, predictions, bracketPicks, roundDeadlines } = data;
 
   const [scores, setScores] = useState<Scores>(() => {
     const init: Scores = {};
@@ -94,6 +119,9 @@ export function PorraEditor({ data }: { data: EditorData }) {
   });
   const [activeGroup, setActiveGroup] = useState(groups[0]?.name ?? "A");
   const [activeKo, setActiveKo] = useState<"cuadro" | string>("cuadro");
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const [state, dispatch, isPending] = useActionState<SaveState, FormData>(
     savePorraAction,
@@ -224,22 +252,29 @@ export function PorraEditor({ data }: { data: EditorData }) {
                         className="flex items-center gap-3 rounded-lg bg-surface-2/60 px-3 py-2.5"
                       >
                         <TeamTag team={teamsById[m.homeId]} align="r" />
-                        <div className="flex items-center gap-1.5">
-                          <ScoreBox
-                            value={scores[m.id]?.home ?? ""}
-                            disabled={locked}
-                            onChange={(v) =>
-                              setScores((s) => ({ ...s, [m.id]: { ...s[m.id], home: v } }))
-                            }
-                          />
-                          <span className="text-muted">-</span>
-                          <ScoreBox
-                            value={scores[m.id]?.away ?? ""}
-                            disabled={locked}
-                            onChange={(v) =>
-                              setScores((s) => ({ ...s, [m.id]: { ...s[m.id], away: v } }))
-                            }
-                          />
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <ScoreBox
+                              value={scores[m.id]?.home ?? ""}
+                              disabled={isMatchLocked(m.kickoff)}
+                              onChange={(v) =>
+                                setScores((s) => ({ ...s, [m.id]: { ...s[m.id], home: v } }))
+                              }
+                            />
+                            <span className="text-muted">-</span>
+                            <ScoreBox
+                              value={scores[m.id]?.away ?? ""}
+                              disabled={isMatchLocked(m.kickoff)}
+                              onChange={(v) =>
+                                setScores((s) => ({ ...s, [m.id]: { ...s[m.id], away: v } }))
+                              }
+                            />
+                          </div>
+                          {mounted && (
+                            <span className="text-[10px] leading-none text-muted">
+                              {isMatchLocked(m.kickoff) ? "🔒" : fmtKickoff(m.kickoff)}
+                            </span>
+                          )}
                         </div>
                         <TeamTag team={teamsById[m.awayId]} align="l" />
                       </div>
@@ -350,7 +385,10 @@ export function PorraEditor({ data }: { data: EditorData }) {
         <BracketDiagram resolved={resolved} teamsById={teamsById} champion={champion} />
       ) : (
         <section className="card p-5">
-          <h3 className="mb-3 font-bold">{ROUND_LABELS[activeKo as keyof typeof ROUND_LABELS]}</h3>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-bold">{ROUND_LABELS[activeKo as keyof typeof ROUND_LABELS]}</h3>
+            <DeadlineBadge deadline={roundDeadlines[activeKo]} />
+          </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {BRACKET.filter((b) => b.round === activeKo).map((b) => (
               <BracketMatch
@@ -358,7 +396,7 @@ export function PorraEditor({ data }: { data: EditorData }) {
                 resolved={resolved[b.slot]}
                 pick={picks[b.slot]}
                 teamsById={teamsById}
-                locked={locked}
+                locked={isRoundLocked(activeKo, roundDeadlines)}
                 onScore={(side, v) =>
                   setPicks((p) => ({ ...p, [b.slot]: { ...p[b.slot], [side]: v } }))
                 }
@@ -369,25 +407,23 @@ export function PorraEditor({ data }: { data: EditorData }) {
         </section>
       )}
 
-      {!locked && (
-        <div className="sticky bottom-4 z-10 mt-8 flex flex-col items-center gap-2">
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={save}
-            className={`px-8 shadow-xl shadow-black/40 ${isComplete ? "btn-accent" : "btn-ghost border-amber-500/60 text-amber-300 hover:bg-amber-500/10"}`}
-          >
-            {isPending ? "Guardando…" : isComplete ? "💾 Guardar mi porra" : "💾 Guardar (incompleta)"}
-          </button>
-          {!isComplete && (
-            <p className="text-xs text-amber-400">
-              {filledMatches < totalMatches
-                ? `⚠ Faltan ${totalMatches - filledMatches} marcador${totalMatches - filledMatches === 1 ? "" : "es"} de grupo${!champion ? " y el campeón" : ""}`
-                : "⚠ Falta elegir el campeón"}
-            </p>
-          )}
-        </div>
-      )}
+      <div className="sticky bottom-4 z-10 mt-8 flex flex-col items-center gap-2">
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={save}
+          className={`px-8 shadow-xl shadow-black/40 ${isComplete ? "btn-accent" : "btn-ghost border-amber-500/60 text-amber-300 hover:bg-amber-500/10"}`}
+        >
+          {isPending ? "Guardando…" : isComplete ? "💾 Guardar mi porra" : "💾 Guardar (incompleta)"}
+        </button>
+        {!isComplete && (
+          <p className="text-xs text-amber-400">
+            {filledMatches < totalMatches
+              ? `⚠ Faltan ${totalMatches - filledMatches} marcador${totalMatches - filledMatches === 1 ? "" : "es"} de grupo${!champion ? " y el campeón" : ""}`
+              : "⚠ Falta elegir el campeón"}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

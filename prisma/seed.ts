@@ -104,12 +104,23 @@ const RR: [number, number][][] = [
   ], // J3
 ];
 
-// Fechas base de cada jornada de la fase de grupos.
-const MD_BASE = [
-  new Date("2026-06-11T16:00:00.000Z"),
-  new Date("2026-06-17T16:00:00.000Z"),
-  new Date("2026-06-23T16:00:00.000Z"),
-];
+// Kickoffs oficiales FIFA por grupo (fuente: Sky Sports BST → UTC).
+// Orden: [jornada1_partido1, jornada1_partido2, jornada2_partido1, jornada2_partido2, jornada3_partido1, jornada3_partido2]
+// Coincide con el orden de emparejamientos del round-robin RR[md][slot].
+const GROUP_KICKOFFS: Record<string, [string, string, string, string, string, string]> = {
+  A: ["2026-06-11T19:00:00.000Z","2026-06-12T02:00:00.000Z","2026-06-19T01:00:00.000Z","2026-06-18T16:00:00.000Z","2026-06-25T01:00:00.000Z","2026-06-25T01:00:00.000Z"],
+  B: ["2026-06-12T19:00:00.000Z","2026-06-13T19:00:00.000Z","2026-06-18T22:00:00.000Z","2026-06-18T19:00:00.000Z","2026-06-24T19:00:00.000Z","2026-06-24T19:00:00.000Z"],
+  C: ["2026-06-13T22:00:00.000Z","2026-06-14T01:00:00.000Z","2026-06-20T00:30:00.000Z","2026-06-19T22:00:00.000Z","2026-06-24T22:00:00.000Z","2026-06-24T22:00:00.000Z"],
+  D: ["2026-06-13T01:00:00.000Z","2026-06-14T04:00:00.000Z","2026-06-19T19:00:00.000Z","2026-06-20T03:00:00.000Z","2026-06-26T02:00:00.000Z","2026-06-26T02:00:00.000Z"],
+  E: ["2026-06-14T17:00:00.000Z","2026-06-14T23:00:00.000Z","2026-06-20T20:00:00.000Z","2026-06-21T00:00:00.000Z","2026-06-25T20:00:00.000Z","2026-06-25T20:00:00.000Z"],
+  F: ["2026-06-14T20:00:00.000Z","2026-06-15T02:00:00.000Z","2026-06-20T17:00:00.000Z","2026-06-21T04:00:00.000Z","2026-06-25T23:00:00.000Z","2026-06-25T23:00:00.000Z"],
+  G: ["2026-06-15T19:00:00.000Z","2026-06-16T01:00:00.000Z","2026-06-21T19:00:00.000Z","2026-06-22T01:00:00.000Z","2026-06-27T03:00:00.000Z","2026-06-27T03:00:00.000Z"],
+  H: ["2026-06-15T16:00:00.000Z","2026-06-15T22:00:00.000Z","2026-06-21T16:00:00.000Z","2026-06-21T22:00:00.000Z","2026-06-27T00:00:00.000Z","2026-06-27T00:00:00.000Z"],
+  I: ["2026-06-16T19:00:00.000Z","2026-06-16T22:00:00.000Z","2026-06-22T21:00:00.000Z","2026-06-23T00:00:00.000Z","2026-06-26T19:00:00.000Z","2026-06-26T19:00:00.000Z"],
+  J: ["2026-06-17T01:00:00.000Z","2026-06-17T04:00:00.000Z","2026-06-22T17:00:00.000Z","2026-06-23T03:00:00.000Z","2026-06-28T02:00:00.000Z","2026-06-28T02:00:00.000Z"],
+  K: ["2026-06-17T17:00:00.000Z","2026-06-18T02:00:00.000Z","2026-06-23T17:00:00.000Z","2026-06-24T02:00:00.000Z","2026-06-27T23:30:00.000Z","2026-06-27T23:30:00.000Z"],
+  L: ["2026-06-17T20:00:00.000Z","2026-06-17T23:00:00.000Z","2026-06-23T20:00:00.000Z","2026-06-23T23:00:00.000Z","2026-06-27T21:00:00.000Z","2026-06-27T21:00:00.000Z"],
+};
 
 function addHours(d: Date, h: number): Date {
   return new Date(d.getTime() + h * 3600_000);
@@ -143,13 +154,12 @@ async function main() {
   }
 
   // Crear partidos de fase de grupos (6 por grupo)
-  let groupIndex = 0;
   for (const gName of groupNames) {
     const ids = groupTeamIds[gName];
+    let kickoffIndex = 0;
     for (let md = 0; md < 3; md++) {
-      let slot = 0;
       for (const [a, b] of RR[md]) {
-        const kickoff = addHours(MD_BASE[md], (groupIndex % 6) * 2 + slot * 3);
+        const kickoff = new Date(GROUP_KICKOFFS[gName][kickoffIndex++]);
         await prisma.match.create({
           data: {
             stage: "GROUP",
@@ -160,10 +170,8 @@ async function main() {
             kickoff,
           },
         });
-        slot++;
       }
     }
-    groupIndex++;
   }
 
   // Crear placeholders de eliminatorias (sin equipos asignados)
@@ -191,7 +199,7 @@ async function main() {
   // Settings (fila única)
   const lockAt = process.env.LOCK_AT
     ? new Date(process.env.LOCK_AT)
-    : new Date("2026-06-11T16:00:00.000Z");
+    : new Date("2026-06-11T19:00:00.000Z");
 
   await prisma.settings.upsert({
     where: { id: 1 },
