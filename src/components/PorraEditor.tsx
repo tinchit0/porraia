@@ -22,7 +22,7 @@ export type EditorData = {
   groups: GroupBlock[];
   teamsById: Record<number, TeamLite>;
   predictions: Record<number, { home: number; away: number }>;
-  bracketPicks: Record<string, { home: number | null; away: number | null }>;
+  bracketPicks: Record<string, { home: number | null; away: number | null; winnerTeamId?: number | null }>;
   roundDeadlines: Record<string, string>; // round → ISO kickoff del primer partido
 };
 
@@ -113,7 +113,7 @@ export function PorraEditor({ data }: { data: EditorData }) {
     const init: Picks = {};
     for (const bs of BRACKET) {
       const p = bracketPicks[bs.slot];
-      init[bs.slot] = { home: numStr(p?.home), away: numStr(p?.away), pen: null };
+      init[bs.slot] = { home: numStr(p?.home), away: numStr(p?.away), pen: p?.winnerTeamId ?? null };
     }
     return init;
   });

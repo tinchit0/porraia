@@ -62,7 +62,7 @@ export default async function PorraPage() {
       preds.map((p) => [p.matchId, { home: p.homeScore, away: p.awayScore }])
     ),
     bracketPicks: Object.fromEntries(
-      picks.map((p) => [p.slot, { home: p.homeScore, away: p.awayScore }])
+      picks.map((p) => [p.slot, { home: p.homeScore, away: p.awayScore, winnerTeamId: p.winnerTeamId }])
     ),
     roundDeadlines,
   };
