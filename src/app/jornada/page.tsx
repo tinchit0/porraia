@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { scoreMatchPrediction } from "@/lib/scoring";
 import { JornadaMatchCard, type ParticipantPred } from "@/components/JornadaMatchCard";
+import { KickoffTime } from "@/components/KickoffTime";
 import type { Stage } from "@/generated/prisma/enums";
 
 export const dynamic = "force-dynamic";
@@ -16,14 +17,6 @@ const ROUNDS: RoundDef[] = [
   { key: "g3", label: "Jornada 3", stage: "GROUP", matchday: 3 },
 ];
 
-function fmtDate(d: Date) {
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
-}
 
 export default async function JornadaPage({
   searchParams,
@@ -127,7 +120,7 @@ export default async function JornadaPage({
               <div className="card flex items-center gap-3 p-3 sm:p-4">
                 <div className="w-20 shrink-0 text-xs text-muted">
                   {m.group ? `Grupo ${m.group.name}` : m.label}
-                  <div>{fmtDate(m.kickoff)}</div>
+                  <div><KickoffTime iso={m.kickoff.toISOString()} /></div>
                   {locked && allPreds.length > 0 && (
                     <div className="mt-0.5 text-[10px] text-muted/60">
                       👥 {allPreds.length}
