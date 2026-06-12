@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
+import { invalidate } from "@/lib/cache";
 import { getCurrentUser } from "@/lib/session";
 import { BRACKET } from "@/lib/bracket";
 
@@ -84,6 +85,11 @@ export async function savePorraAction(
       create: { userId: user.id, slot: bs.slot, homeScore: home, awayScore: away, winnerTeamId },
     });
   }
+
+  // El usuario cambió sus pronósticos: invalida clasificación, mapa y jornada.
+  invalidate("standings");
+  invalidate("mapa");
+  invalidate("jornada");
 
   revalidatePath("/porra");
   revalidatePath("/clasificacion");

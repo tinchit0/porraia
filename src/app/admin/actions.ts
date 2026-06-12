@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
+import { invalidate } from "@/lib/cache";
 import { getCurrentUser } from "@/lib/session";
 import { recomputeMatch } from "@/lib/recompute";
 import { recomputeAllBrackets } from "@/lib/bracket-server";
@@ -55,6 +56,7 @@ export async function saveGroupResultsAction(
   // La clasificación de grupos afecta a los emparejamientos del cuadro real.
   await recomputeAllBrackets();
 
+  invalidate(); // resultados nuevos: afecta a toda la caché global
   revalidatePath("/admin");
   revalidatePath("/clasificacion");
   revalidatePath("/jornada");
@@ -87,6 +89,7 @@ export async function saveRealBracketAction(
 
   await recomputeAllBrackets();
 
+  invalidate(); // resultados del cuadro: afecta a toda la caché global
   revalidatePath("/admin");
   revalidatePath("/clasificacion");
   revalidatePath("/jornada");

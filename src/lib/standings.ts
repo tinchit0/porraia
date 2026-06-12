@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { cached } from "@/lib/cache";
 import { POINTS } from "@/lib/scoring";
 import { ROUND_ORDER } from "@/lib/bracket";
 
@@ -20,8 +21,17 @@ export type StandingRow = {
   completed: { filled: number; total: number };
 };
 
-/** Calcula la clasificación general a partir de los puntos cacheados. */
-export async function getStandings(): Promise<StandingRow[]> {
+/**
+ * Clasificación general. Es idéntica para todos los usuarios, así que la
+ * cacheamos en memoria: solo se recalcula cuando una server action invalida el
+ * tag "standings" (admin guarda resultados, alguien edita su porra, nuevo
+ * registro). El TTL de 60s es solo un colchón de seguridad.
+ */
+export function getStandings(): Promise<StandingRow[]> {
+  return cached("standings", 60_000, computeStandings);
+}
+
+async function computeStandings(): Promise<StandingRow[]> {
   const [users, playedMatchIds] = await Promise.all([
     prisma.user.findMany({
       where: { role: { not: "ADMIN" } },

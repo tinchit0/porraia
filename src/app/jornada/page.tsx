@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { cached } from "@/lib/cache";
 import { getCurrentUser } from "@/lib/session";
 import { scoreMatchPrediction } from "@/lib/scoring";
 import { JornadaMatchCard, type ParticipantPred } from "@/components/JornadaMatchCard";
@@ -51,39 +52,56 @@ export default async function JornadaPage({
 
   // ─── Fase de grupos ───────────────────────────────────────────────────────
   if (tab.kind === "group") {
-    const matches = await prisma.match.findMany({
-      where: { stage: "GROUP", matchday: tab.matchday },
-      orderBy: [{ kickoff: "asc" }],
-      include: { homeTeam: true, awayTeam: true, group: true },
-    });
+    // Datos globales (partidos + pronósticos ajenos ya visibles): iguales para
+    // todos, se cachean. TTL corto (30s) porque la visibilidad depende del
+    // pitido inicial de cada partido, no solo de mutaciones.
+    const { matches, allPredsByMatch } = await cached(
+      `jornada:g${tab.matchday}`,
+      30_000,
+      async () => {
+        const matches = await prisma.match.findMany({
+          where: { stage: "GROUP", matchday: tab.matchday },
+          orderBy: [{ kickoff: "asc" }],
+          include: { homeTeam: true, awayTeam: true, group: true },
+        });
+
+        const at = new Date();
+        const lockedMatchIds = matches
+          .filter((m) => m.kickoff <= at)
+          .map((m) => m.id);
+
+        // Solo los pronósticos de partidos YA bloqueados salen del servidor.
+        const allPredsRaw =
+          lockedMatchIds.length > 0
+            ? await prisma.prediction.findMany({
+                where: { matchId: { in: lockedMatchIds } },
+                select: {
+                  matchId: true,
+                  homeScore: true,
+                  awayScore: true,
+                  user: { select: { name: true } },
+                },
+              })
+            : [];
+
+        const allPredsByMatch = new Map<number, ParticipantPred[]>();
+        for (const p of allPredsRaw) {
+          const arr = allPredsByMatch.get(p.matchId) ?? [];
+          arr.push({ name: p.user.name, homeScore: p.homeScore, awayScore: p.awayScore });
+          allPredsByMatch.set(p.matchId, arr);
+        }
+
+        return { matches, allPredsByMatch };
+      },
+    );
 
     const now = new Date();
-    const lockedMatchIds = matches.filter((m) => m.kickoff <= now).map((m) => m.id);
 
-    const [preds, allPredsRaw] = await Promise.all([
-      prisma.prediction.findMany({
-        where: { userId: user.id, matchId: { in: matches.map((m) => m.id) } },
-      }),
-      lockedMatchIds.length > 0
-        ? prisma.prediction.findMany({
-            where: { matchId: { in: lockedMatchIds } },
-            select: {
-              matchId: true,
-              homeScore: true,
-              awayScore: true,
-              user: { select: { name: true } },
-            },
-          })
-        : Promise.resolve([]),
-    ]);
-
+    // Pronósticos del propio usuario: sin cachear (baratos y deben verse al instante).
+    const preds = await prisma.prediction.findMany({
+      where: { userId: user.id, matchId: { in: matches.map((m) => m.id) } },
+    });
     const predByMatch = new Map(preds.map((p) => [p.matchId, p]));
-    const allPredsByMatch = new Map<number, ParticipantPred[]>();
-    for (const p of allPredsRaw) {
-      const arr = allPredsByMatch.get(p.matchId) ?? [];
-      arr.push({ name: p.user.name, homeScore: p.homeScore, awayScore: p.awayScore });
-      allPredsByMatch.set(p.matchId, arr);
-    }
 
     const roundPoints = matches.reduce((s, m) => {
       const p = predByMatch.get(m.id);
@@ -172,47 +190,47 @@ export default async function JornadaPage({
   const isFinalsTab = round === "F";
   const stages = isFinalsTab ? (["THIRD", "FINAL"] as Stage[]) : [dbStage];
 
-  const matches = await prisma.match.findMany({
-    where: { stage: { in: stages } },
-    orderBy: { kickoff: "asc" }, // THIRD se juega antes que la Final
-    include: { homeTeam: true, awayTeam: true },
-  });
-
   // Slots del bracket en el mismo orden que los matches (THIRD primero si aplica)
   const bracketSlots = isFinalsTab
     ? [...BRACKET.filter((b) => b.round === "THIRD"), ...BRACKET.filter((b) => b.round === "F")]
     : BRACKET.filter((b) => b.round === round);
-
-  // Todos los picks de todos los usuarios para estos slots
   const slotNames = bracketSlots.map((b) => b.slot);
-  const allPicksRaw = await prisma.bracketPick.findMany({
-    where: { slot: { in: slotNames } },
-    include: { user: { select: { id: true, name: true } } },
-  });
 
-  // Agrupar picks por slot
-  const picksBySlot = new Map<string, KnockoutPickInfo[]>();
-  for (const p of allPicksRaw) {
-    const arr = picksBySlot.get(p.slot) ?? [];
-    if (p.homeScore == null || p.awayScore == null) continue;
-    arr.push({
-      userId: p.userId,
-      userName: p.user.name,
-      homeScore: p.homeScore,
-      awayScore: p.awayScore,
-      winnerTeamId: p.winnerTeamId,
-    });
-    picksBySlot.set(p.slot, arr);
-  }
+  // Datos globales (partidos + picks de todos): iguales para todos, se cachean.
+  const { matches, picksBySlot } = await cached(
+    `jornada:${tab.key}`,
+    30_000,
+    async () => {
+      const matches = await prisma.match.findMany({
+        where: { stage: { in: stages } },
+        orderBy: { kickoff: "asc" }, // THIRD se juega antes que la Final
+        include: { homeTeam: true, awayTeam: true },
+      });
+
+      const allPicksRaw = await prisma.bracketPick.findMany({
+        where: { slot: { in: slotNames } },
+        include: { user: { select: { id: true, name: true } } },
+      });
+
+      const picksBySlot = new Map<string, KnockoutPickInfo[]>();
+      for (const p of allPicksRaw) {
+        const arr = picksBySlot.get(p.slot) ?? [];
+        if (p.homeScore == null || p.awayScore == null) continue;
+        arr.push({
+          userId: p.userId,
+          userName: p.user.name,
+          homeScore: p.homeScore,
+          awayScore: p.awayScore,
+          winnerTeamId: p.winnerTeamId,
+        });
+        picksBySlot.set(p.slot, arr);
+      }
+
+      return { matches, picksBySlot };
+    },
+  );
 
   const now = new Date();
-
-  // Mapa teamId → {name, flag} para todos los equipos en estos partidos
-  const teamsById = new Map<number, { name: string; flag: string }>();
-  for (const m of matches) {
-    if (m.homeTeam) teamsById.set(m.homeTeam.id, m.homeTeam);
-    if (m.awayTeam) teamsById.set(m.awayTeam.id, m.awayTeam);
-  }
 
   return (
     <JornadaLayout tab={tab} tabs={TABS} stage="ko">
@@ -221,9 +239,12 @@ export default async function JornadaPage({
           const bs = bracketSlots[i];
           if (!bs) return null;
 
-          const allPicks = picksBySlot.get(bs.slot) ?? [];
-          const myPick = allPicks.find((p) => p.userId === user.id) ?? null;
+          const allPicksFull = picksBySlot.get(bs.slot) ?? [];
+          const myPick = allPicksFull.find((p) => p.userId === user.id) ?? null;
           const locked = m.kickoff <= now;
+          // Los picks ajenos solo salen del servidor cuando la ronda está
+          // bloqueada (la tarjeta ya los ignora si no, pero así no viajan).
+          const allPicks = locked ? allPicksFull : [];
 
           const homeTeam: KnockoutTeamSlot = m.homeTeam
             ? { id: m.homeTeam.id, name: m.homeTeam.name, flag: m.homeTeam.flag }

@@ -1,9 +1,22 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { cached } from "@/lib/cache";
 import { getCurrentUser } from "@/lib/session";
 import { getLockAt } from "@/lib/lock";
 import { getStandings } from "@/lib/standings";
 import { Countdown } from "@/components/Countdown";
+
+/** Próximos 5 partidos de grupos — iguales para todos, así que se cachean. */
+function getUpcomingGroupMatches() {
+  return cached("matches:upcoming", 300_000, () =>
+    prisma.match.findMany({
+      where: { stage: "GROUP" },
+      orderBy: { kickoff: "asc" },
+      take: 5,
+      include: { homeTeam: true, awayTeam: true, group: true },
+    }),
+  );
+}
 
 export const dynamic = "force-dynamic";
 
@@ -50,12 +63,7 @@ export default async function Home() {
 
   const [standings, nextMatches, myBet] = await Promise.all([
     getStandings(),
-    prisma.match.findMany({
-      where: { stage: "GROUP" },
-      orderBy: { kickoff: "asc" },
-      take: 5,
-      include: { homeTeam: true, awayTeam: true, group: true },
-    }),
+    getUpcomingGroupMatches(),
     prisma.prediction.count({ where: { userId: user.id } }),
   ]);
 

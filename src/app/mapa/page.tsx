@@ -1,65 +1,75 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { cached } from "@/lib/cache";
 import { getCurrentUser } from "@/lib/session";
 import { GoalMap, type TeamGoalData } from "@/components/GoalMap";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Agregado de goles pronosticados por selección. Recorre TODAS las
+ * predicciones, así que se cachea (igual para todos). Se invalida con el tag
+ * "mapa" cuando alguien edita su porra; TTL 60s de colchón.
+ */
+function getGoalMapData() {
+  return cached("mapa", 60_000, async () => {
+    const [predictions, teams] = await Promise.all([
+      prisma.prediction.findMany({
+        where: { match: { stage: "GROUP" } },
+        select: {
+          homeScore: true,
+          awayScore: true,
+          match: { select: { homeTeamId: true, awayTeamId: true } },
+        },
+      }),
+      prisma.team.findMany({
+        select: { id: true, code: true, name: true, flag: true },
+      }),
+    ]);
+
+    // Aggregate: per-prediction goals per team → average
+    const agg: Record<number, { sum: number; count: number }> = {};
+    for (const p of predictions) {
+      const { homeTeamId, awayTeamId } = p.match;
+      if (homeTeamId != null) {
+        agg[homeTeamId] ??= { sum: 0, count: 0 };
+        agg[homeTeamId].sum += p.homeScore;
+        agg[homeTeamId].count++;
+      }
+      if (awayTeamId != null) {
+        agg[awayTeamId] ??= { sum: 0, count: 0 };
+        agg[awayTeamId].sum += p.awayScore;
+        agg[awayTeamId].count++;
+      }
+    }
+
+    const teamData: TeamGoalData[] = teams
+      .map((t) => ({
+        code: t.code,
+        name: t.name,
+        flag: t.flag,
+        avgGoals: agg[t.id] ? agg[t.id].sum / agg[t.id].count : 0,
+        predCount: agg[t.id]?.count ?? 0,
+      }))
+      .sort((a, b) => b.avgGoals - a.avgGoals);
+
+    return { teamData, predCount: predictions.length };
+  });
+}
+
 export default async function MapaPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?callbackUrl=/mapa");
 
-  const [predictions, teams] = await Promise.all([
-    prisma.prediction.findMany({
-      where: { match: { stage: "GROUP" } },
-      select: {
-        homeScore: true,
-        awayScore: true,
-        match: { select: { homeTeamId: true, awayTeamId: true } },
-      },
-    }),
-    prisma.team.findMany({
-      select: { id: true, code: true, name: true, flag: true },
-    }),
-  ]);
-
-  // Aggregate: per-prediction goals per team → average
-  const agg: Record<number, { sum: number; count: number }> = {};
-  for (const p of predictions) {
-    const { homeTeamId, awayTeamId } = p.match;
-    if (homeTeamId != null) {
-      agg[homeTeamId] ??= { sum: 0, count: 0 };
-      agg[homeTeamId].sum += p.homeScore;
-      agg[homeTeamId].count++;
-    }
-    if (awayTeamId != null) {
-      agg[awayTeamId] ??= { sum: 0, count: 0 };
-      agg[awayTeamId].sum += p.awayScore;
-      agg[awayTeamId].count++;
-    }
-  }
-
-  const teamData: TeamGoalData[] = teams
-    .map((t) => ({
-      code: t.code,
-      name: t.name,
-      flag: t.flag,
-      avgGoals: agg[t.id] ? agg[t.id].sum / agg[t.id].count : 0,
-      predCount: agg[t.id]?.count ?? 0,
-    }))
-    .sort((a, b) => b.avgGoals - a.avgGoals);
-
-  const totalPreds = new Set(
-    predictions.map((p) => p.match.homeTeamId?.toString() ?? "")
-  ).size;
+  const { teamData, predCount } = await getGoalMapData();
 
   return (
     <div>
       <h1 className="text-3xl font-extrabold">Mapa de goles</h1>
       <p className="mt-1 text-muted">
         Media de goles pronosticados por selección en fase de grupos, según todas las porras.
-        {predictions.length > 0 && (
-          <span className="ml-1">({predictions.length} predicciones)</span>
+        {predCount > 0 && (
+          <span className="ml-1">({predCount} predicciones)</span>
         )}
       </p>
 

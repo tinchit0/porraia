@@ -4,6 +4,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { AuthError } from "next-auth";
 import { prisma } from "@/lib/db";
+import { invalidate } from "@/lib/cache";
 import { signIn, signOut } from "@/lib/auth";
 
 const registerSchema = z.object({
@@ -38,6 +39,8 @@ export async function registerAction(
   await prisma.user.create({
     data: { name: parsed.data.name, email, passwordHash },
   });
+
+  invalidate("standings"); // nuevo participante en la clasificación
 
   // Auto-login tras registrar (lanza redirect a /porra).
   await signIn("credentials", {
