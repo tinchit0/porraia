@@ -2,9 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { cached } from "@/lib/cache";
 import { getCurrentUser } from "@/lib/session";
-import { getLockAt } from "@/lib/lock";
 import { getStandings } from "@/lib/standings";
-import { Countdown } from "@/components/Countdown";
 
 /** Próximos 5 partidos de grupos — iguales para todos, así que se cachean. */
 function getUpcomingGroupMatches() {
@@ -32,7 +30,6 @@ function fmtDate(d: Date) {
 
 export default async function Home() {
   const user = await getCurrentUser();
-  const lockAt = await getLockAt();
 
   if (!user) {
     return (
@@ -42,7 +39,7 @@ export default async function Home() {
           PORR<span className="text-accent">AIA</span>
         </h1>
         <p className="mt-4 max-w-xl text-lg text-muted">
-          Predice los marcadores de la fase de grupos, apuesta por el campeón y el pichichi,
+          Predice los marcadores de la fase de grupos, apuesta por el campeón
           y compite con tus amigos por la gloria.
         </p>
         <div className="mt-8 flex gap-3">
@@ -52,10 +49,6 @@ export default async function Home() {
           <Link href="/login" className="btn-ghost px-6 text-base">
             Entrar
           </Link>
-        </div>
-        <div className="mt-10">
-          <p className="mb-2 text-sm text-muted">El plazo para rellenar la porra cierra en:</p>
-          <Countdown lockAtISO={lockAt.toISOString()} />
         </div>
       </div>
     );
@@ -77,7 +70,6 @@ export default async function Home() {
           <h1 className="text-3xl font-extrabold">¡Hola, {user.name}! 👋</h1>
           <p className="mt-1 text-muted">Bienvenido a PORRAIA.</p>
         </div>
-        <Countdown lockAtISO={lockAt.toISOString()} />
       </div>
 
       {/* Tarjetas resumen */}
