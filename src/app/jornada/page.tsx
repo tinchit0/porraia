@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { cached } from "@/lib/cache";
 import { getCurrentUser } from "@/lib/session";
-import { scoreMatchPrediction } from "@/lib/scoring";
+import { scoreMatchPrediction, KNOCKOUT_POINTS } from "@/lib/scoring";
 import { JornadaMatchCard, type ParticipantPred } from "@/components/JornadaMatchCard";
 import { KnockoutJornadaCard, type KnockoutPickInfo, type KnockoutTeamSlot } from "@/components/KnockoutJornadaCard";
 import { KickoffTime } from "@/components/KickoffTime";
@@ -161,9 +161,11 @@ export default async function JornadaPage({
                             className={`badge mt-1 ${
                               pts === 3
                                 ? "bg-primary text-primary-fg"
-                                : pts === 1
-                                  ? "bg-accent/30 text-accent"
-                                  : "bg-surface-2 text-muted"
+                                : pts === 2
+                                  ? "bg-lime-400/25 text-lime-300"
+                                  : pts === 1
+                                    ? "bg-accent/30 text-accent"
+                                    : "bg-surface-2 text-muted"
                             }`}
                           >
                             +{pts}
@@ -197,20 +199,25 @@ export default async function JornadaPage({
   const slotNames = bracketSlots.map((b) => b.slot);
 
   // Datos globales (partidos + picks de todos): iguales para todos, se cachean.
-  const { matches, picksBySlot } = await cached(
+  const { matches, picksBySlot, realWinnerBySlot } = await cached(
     `jornada:${tab.key}`,
     30_000,
     async () => {
-      const matches = await prisma.match.findMany({
-        where: { stage: { in: stages } },
-        orderBy: { kickoff: "asc" }, // THIRD se juega antes que la Final
-        include: { homeTeam: true, awayTeam: true },
-      });
-
-      const allPicksRaw = await prisma.bracketPick.findMany({
-        where: { slot: { in: slotNames } },
-        include: { user: { select: { id: true, name: true } } },
-      });
+      const [matches, allPicksRaw, realKo] = await Promise.all([
+        prisma.match.findMany({
+          where: { stage: { in: stages } },
+          orderBy: { kickoff: "asc" }, // THIRD se juega antes que la Final
+          include: { homeTeam: true, awayTeam: true },
+        }),
+        prisma.bracketPick.findMany({
+          where: { slot: { in: slotNames } },
+          include: { user: { select: { id: true, name: true } } },
+        }),
+        prisma.realKnockout.findMany({
+          where: { slot: { in: slotNames } },
+          select: { slot: true, winnerTeamId: true },
+        }),
+      ]);
 
       const picksBySlot = new Map<string, KnockoutPickInfo[]>();
       for (const p of allPicksRaw) {
@@ -222,15 +229,40 @@ export default async function JornadaPage({
           homeScore: p.homeScore,
           awayScore: p.awayScore,
           winnerTeamId: p.winnerTeamId,
+          points: p.points,
         });
         picksBySlot.set(p.slot, arr);
       }
 
-      return { matches, picksBySlot };
+      // Ganador real por slot (penaltis incluidos vía RealKnockout.winnerTeamId).
+      const realWinnerBySlot = new Map(realKo.map((k) => [k.slot, k.winnerTeamId]));
+
+      return { matches, picksBySlot, realWinnerBySlot };
     },
   );
 
   const now = new Date();
+
+  // Ganadores reales por ronda (mismo criterio que el servidor: un set por ronda).
+  // Por marcador y, en caso de empate, por penaltis (RealKnockout.winnerTeamId).
+  const realWinnersByRound = new Map<string, Set<number>>();
+  matches.forEach((m, i) => {
+    const bs = bracketSlots[i];
+    if (!bs || m.homeScore == null || m.awayScore == null) return;
+    const w =
+      m.homeScore > m.awayScore
+        ? m.homeTeam?.id ?? null
+        : m.awayScore > m.homeScore
+          ? m.awayTeam?.id ?? null
+          : realWinnerBySlot.get(bs.slot) ?? null;
+    if (w == null) return;
+    let set = realWinnersByRound.get(bs.round);
+    if (!set) {
+      set = new Set();
+      realWinnersByRound.set(bs.round, set);
+    }
+    set.add(w);
+  });
 
   return (
     <JornadaLayout tab={tab} tabs={TABS} stage="ko">
@@ -254,6 +286,16 @@ export default async function JornadaPage({
             ? { id: m.awayTeam.id, name: m.awayTeam.name, flag: m.awayTeam.flag }
             : { id: null, name: slotRefLabel(bs.away), flag: null };
 
+          // Split de puntos de mi pick: avance (escalado por ronda) + resultado.
+          // El avance puntúa si el equipo que dije clasifica en esa ronda (igual
+          // que el servidor: set de ganadores por ronda, no por cruce concreto).
+          const advancePts =
+            myPick?.winnerTeamId != null && realWinnersByRound.get(bs.round)?.has(myPick.winnerTeamId)
+              ? KNOCKOUT_POINTS[bs.round] ?? 0
+              : 0;
+          // El total cacheado (bracketPick.points) ya es avance + resultado.
+          const resultPts = Math.max(0, (myPick?.points ?? 0) - advancePts);
+
           return (
             <KnockoutJornadaCard
               key={m.id}
@@ -267,6 +309,8 @@ export default async function JornadaPage({
               allPicks={allPicks}
               currentUserId={user.id}
               locked={locked}
+              resultPts={resultPts}
+              advancePts={advancePts}
             />
           );
         })}

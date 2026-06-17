@@ -9,6 +9,7 @@ export type KnockoutPickInfo = {
   homeScore: number;
   awayScore: number;
   winnerTeamId: number | null;
+  points: number;
 };
 
 export type KnockoutTeamSlot = {
@@ -75,6 +76,8 @@ export function KnockoutJornadaCard({
   allPicks,
   currentUserId,
   locked,
+  resultPts,
+  advancePts,
 }: {
   label: string;
   kickoffISO: string;
@@ -86,6 +89,10 @@ export function KnockoutJornadaCard({
   allPicks: KnockoutPickInfo[];
   currentUserId: string;
   locked: boolean;
+  /** Puntos por el marcador del cruce (0 si no aplica o no acertaste). */
+  resultPts: number;
+  /** Puntos por que tu equipo clasifique (0 si no clasifica el que dijiste). */
+  advancePts: number;
 }) {
   const played = realHome != null && realAway != null;
 
@@ -179,7 +186,7 @@ export function KnockoutJornadaCard({
         </div>
       </div>
 
-      {/* Columna derecha: mi pronóstico (solo si los equipos coinciden) */}
+      {/* Columna derecha: mi pronóstico (solo si los equipos coinciden) + puntos */}
       <div className="w-24 shrink-0 text-right text-xs">
         {pickMatchesTeams ? (
           <div className="text-muted">
@@ -187,6 +194,32 @@ export function KnockoutJornadaCard({
           </div>
         ) : (
           <span className="text-muted/40">—</span>
+        )}
+        {(resultPts > 0 || advancePts > 0) && (
+          <div className="mt-1 flex flex-wrap justify-end gap-1">
+            {resultPts > 0 && (
+              <span
+                title="Puntos por el marcador del cruce"
+                className={`badge ${
+                  resultPts === 3
+                    ? "bg-primary text-primary-fg"
+                    : resultPts === 2
+                      ? "bg-lime-400/25 text-lime-300"
+                      : "bg-accent/30 text-accent"
+                }`}
+              >
+                +{resultPts}
+              </span>
+            )}
+            {advancePts > 0 && (
+              <span
+                title="Puntos por clasificar el equipo que dijiste"
+                className="badge border border-primary/40 bg-primary/20 text-green-300"
+              >
+                ↑{advancePts}
+              </span>
+            )}
+          </div>
         )}
       </div>
     </div>
