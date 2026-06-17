@@ -41,6 +41,7 @@ export async function registerAction(
   });
 
   invalidate("standings"); // nuevo participante en la clasificación
+  invalidate("stats"); // afecta a las vistas de pronósticos (mapa/confederaciones)
 
   // Auto-login tras registrar (lanza redirect a /porra).
   await signIn("credentials", {

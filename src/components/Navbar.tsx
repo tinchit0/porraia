@@ -7,7 +7,7 @@ const NAV = [
   { href: "/porra", label: "Mi porra" },
   { href: "/jornada", label: "Jornada" },
   { href: "/clasificacion", label: "Clasificación" },
-  { href: "/mapa", label: "Mapa" },
+  { href: "/stats", label: "Stats" },
 ];
 
 export async function Navbar() {

@@ -29,7 +29,7 @@ export async function loadGroupsForBracket() {
 type LoadedGroups = Awaited<ReturnType<typeof loadGroupsForBracket>>;
 
 /** Convierte los grupos cargados al formato que necesita el motor del cuadro. */
-function toStandingsInput(groups: LoadedGroups): GroupForStandings[] {
+export function toStandingsInput(groups: LoadedGroups): GroupForStandings[] {
   return groups.map((g) => ({
     name: g.name,
     teams: g.teams.map((t, i) => ({ teamId: t.id, seed: i })),

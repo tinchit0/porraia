@@ -86,9 +86,10 @@ export async function savePorraAction(
     });
   }
 
-  // El usuario cambió sus pronósticos: invalida clasificación, mapa y jornada.
+  // El usuario cambió sus pronósticos: invalida clasificación, stats (mapa/
+  // confederaciones/evolución) y jornada.
   invalidate("standings");
-  invalidate("mapa");
+  invalidate("stats");
   invalidate("jornada");
 
   revalidatePath("/porra");
