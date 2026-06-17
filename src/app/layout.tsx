@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/Navbar";
-import { TwemojiProvider } from "@/components/TwemojiProvider";
+import { FlagFont } from "@/components/FlagFont";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,7 +38,7 @@ export default function RootLayout({
         <footer className="border-t border-border py-6 text-center text-sm text-muted">
           PORRAIA ⚽ · Hecho porque con Claude se hace todo muy fácil y me sobran tokens
         </footer>
-        <TwemojiProvider />
+        <FlagFont />
       </body>
     </html>
   );
