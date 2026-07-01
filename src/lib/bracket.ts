@@ -1,6 +1,8 @@
 // Motor puro del cuadro de eliminatorias del Mundial 2026 (estructura oficial).
 // Sin dependencias de servidor: se usa en cliente (cálculo en vivo) y en servidor (puntuación).
 
+import { THIRD_ALLOCATION, THIRD_COLUMN_SLOTS } from "@/lib/third-allocation";
+
 export type MiniMatch = {
   homeTeamId: number;
   awayTeamId: number;
@@ -226,11 +228,34 @@ export function slotRefLabel(ref: SlotRef): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Asigna cada uno de los 8 terceros clasificados a un hueco de tercero respetando
- * los grupos admitidos por cada hueco. Devuelve slot → teamId.
- * Usa el algoritmo de Kuhn (matching bipartito máximo), determinista.
+ * Asigna cada uno de los 8 terceros clasificados a su hueco.
+ *
+ * Con los 8 terceros determinados usa la TABLA OFICIAL de la FIFA (Anexo C del
+ * reglamento, 495 combinaciones): el reparto no es un matching cualquiera, sino
+ * una asignación predeterminada según qué 8 grupos aportan tercero.
+ *
+ * Cuando aún no hay 8 terceros (fase de grupos incompleta / previsión en vivo) o
+ * la combinación no está en la tabla, cae al matching bipartito de Kuhn para
+ * mostrar un reparto válido provisional.
  */
 function assignThirds(thirds: ThirdTeam[]): Record<string, number | null> {
+  // Camino oficial: 8 terceros con grupos únicos → tabla del reglamento.
+  if (thirds.length === 8) {
+    const groups = thirds.map((t) => t.group);
+    const key = [...groups].sort().join("");
+    const value = THIRD_ALLOCATION[key];
+    if (value && new Set(groups).size === 8) {
+      const teamByGroup = new Map(thirds.map((t) => [t.group, t.teamId]));
+      const out: Record<string, number | null> = {};
+      for (const s of THIRD_SLOTS) out[s.slot] = null;
+      for (let col = 0; col < THIRD_COLUMN_SLOTS.length; col++) {
+        out[THIRD_COLUMN_SLOTS[col]] = teamByGroup.get(value[col]) ?? null;
+      }
+      return out;
+    }
+  }
+
+  // Fallback (datos incompletos): matching bipartito máximo (Kuhn), determinista.
   const slots = THIRD_SLOTS;
   const matchThird = new Array<number>(thirds.length).fill(-1); // tercero j → índice de slot
   const can = (si: number, tj: number) => slots[si].allowed.includes(thirds[tj].group);
